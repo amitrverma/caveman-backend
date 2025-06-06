@@ -8,6 +8,7 @@ import uuid
 import jwt
 import json
 import os
+import io
 from datetime import datetime, timedelta
 
 router = APIRouter()
@@ -16,7 +17,7 @@ router = APIRouter()
 firebase_creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
 
 if firebase_creds_json:
-    cred = credentials.Certificate(json.loads(firebase_creds_json))
+    cred = credentials.Certificate(io.StringIO(firebase_creds_json))
     initialize_app(cred)
 else:
     raise RuntimeError("Missing Firebase credentials")
