@@ -9,6 +9,7 @@ import jwt
 import json
 import os
 import io
+from sqlalchemy import select
 from datetime import datetime, timedelta
 
 router = APIRouter()
@@ -58,10 +59,9 @@ async def firebase_login(request: Request, db: AsyncSession = Depends(get_db)):
         print(f"👤 Firebase user: {email}, {name}")
 
         # Check if user exists
-        result = await db.execute(
-            User.__table__.select().where(User.email == email)
-        )
-        user = result.scalar_one_or_none()
+        stmt = select(User).where(User.email == email)
+        result = await db.execute(stmt)
+        user = result.scalars().first()
 
         if not user:
             print("🆕 New user detected. Creating in DB...")
