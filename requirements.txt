@@ -9,4 +9,3 @@ pyjwt
 httpx
 authlib
 firebase-admin
-psycopg2-binary
