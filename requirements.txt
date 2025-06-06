@@ -8,3 +8,4 @@ passlib
 pyjwt
 httpx
 authlib
+firebase-admin
