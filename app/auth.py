@@ -13,32 +13,49 @@ from datetime import datetime, timedelta
 
 router = APIRouter()
 
-# Init Firebase Admin
+# Init Firebase Admin with logging
 firebase_creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
+print("🔐 Firebase credentials loaded from environment.")
 
 if firebase_creds_json:
-    cred = credentials.Certificate(io.StringIO(firebase_creds_json))
-    initialize_app(cred)
+    try:
+        json_dict = json.loads(firebase_creds_json)
+        print("🔍 Firebase project_id:", json_dict.get("project_id"))
+        json_dict["private_key"] = json_dict["private_key"].replace("\\n", "\n")
+        cred = credentials.Certificate(json_dict)
+        initialize_app(cred)
+        print("✅ Firebase Admin SDK initialized.")
+    except Exception as e:
+        print("❌ Firebase Admin SDK initialization failed:", e)
+        raise RuntimeError("Failed to initialize Firebase Admin SDK")
 else:
+    print("❌ FIREBASE_CREDENTIALS_JSON is missing.")
     raise RuntimeError("Missing Firebase credentials")
 
-# Issue JWT using your SECRET_KEY
+
+# JWT creation helper
 def create_jwt(user_id):
     payload = {
         "sub": str(user_id),
         "exp": datetime.utcnow() + timedelta(days=7),
     }
+    print("🔑 Creating JWT for user_id:", user_id)
     return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
 
 @router.post("/firebase-login")
 async def firebase_login(request: Request, db: AsyncSession = Depends(get_db)):
-    body = await request.json()
-    id_token = body.get("idToken")
-
     try:
+        body = await request.json()
+        id_token = body.get("idToken")
+        print("📥 Received ID token:", id_token[:40], "...")
+
         decoded_token = firebase_auth.verify_id_token(id_token)
+        print("🧠 Decoded Firebase token:", decoded_token)
+
         email = decoded_token["email"]
         name = decoded_token.get("name", "Anonymous")
+        print(f"👤 Firebase user: {email}, {name}")
 
         # Check if user exists
         result = await db.execute(
@@ -47,15 +64,19 @@ async def firebase_login(request: Request, db: AsyncSession = Depends(get_db)):
         user = result.scalar_one_or_none()
 
         if not user:
+            print("🆕 New user detected. Creating in DB...")
             user = User(id=uuid.uuid4(), email=email, name=name)
             db.add(user)
             await db.commit()
             await db.refresh(user)
+            print("✅ User created:", user.id)
+        else:
+            print("👤 Existing user found:", user.id)
 
         jwt_token = create_jwt(user.id)
+        print("🎫 JWT token issued successfully.")
         return {"token": jwt_token, "user": {"name": user.name, "email": user.email}}
 
     except Exception as e:
-        print("Firebase token verification failed:", e)
+        print("🔥 Firebase login failed:", e)
         raise HTTPException(status_code=401, detail="Invalid Firebase token")
-
