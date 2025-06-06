@@ -6,13 +6,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 import uuid
 import jwt
+import json
+import os
 from datetime import datetime, timedelta
 
 router = APIRouter()
 
 # Init Firebase Admin
-cred = credentials.Certificate("./firebase_key.json")  # Download from Firebase console
-initialize_app(cred)
+firebase_creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
+
+if firebase_creds_json:
+    cred = credentials.Certificate(json.loads(firebase_creds_json))
+    initialize_app(cred)
+else:
+    raise RuntimeError("Missing Firebase credentials")
 
 # Issue JWT using your SECRET_KEY
 def create_jwt(user_id):
