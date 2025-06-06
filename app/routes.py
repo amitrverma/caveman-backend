@@ -19,8 +19,10 @@ def get_current_user(authorization: str = Header(...)):
             raise ValueError("Invalid auth scheme")
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         return payload["sub"]
-    except Exception:
+    except Exception as e:
+        print("JWT decode error:", e)
         raise HTTPException(status_code=401, detail="Invalid or missing token")
+
 
 
 @router.post("/spots", response_model=SpotResponse)
@@ -29,16 +31,22 @@ async def create_spot(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user)
 ):
-    new_spot = CavemanSpot(
-        user_id=user_id,
-        description=spot.description,
-        date=spot.date or date.today(),
-        created_at=datetime.utcnow(),
-    )
-    db.add(new_spot)
-    await db.commit()
-    await db.refresh(new_spot)
-    return new_spot
+    try:
+        new_spot = CavemanSpot(
+            user_id=user_id,
+            description=spot.description,
+            date=spot.date or date.today(),
+            created_at=datetime.utcnow(),
+        )
+        db.add(new_spot)
+        await db.commit()
+        await db.refresh(new_spot)
+        return new_spot
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to create spot: {str(e)}")
+
 
 
 @router.get("/spots", response_model=list[SpotResponse])
