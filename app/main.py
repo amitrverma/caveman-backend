@@ -10,7 +10,8 @@ app.add_middleware(
         allow_origins=[
         "https://caveman.amitrverma.com",
         "https://amitrverma.com",
-        "http://localhost:3000",  # for local dev (optional)
+        "http://localhost:3000", 
+        "https://neurocientwa-akaybxbygyc8bgeg.canadacentral-01.azurewebsites.net", # for local dev (optional)
     ],
     allow_credentials=True,
     allow_methods=["*"],
