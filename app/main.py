@@ -7,7 +7,11 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # or ["*"] for all
+        allow_origins=[
+        "https://caveman.amitrverma.com",
+        "https://amitrverma.com",
+        "http://localhost:3000",  # for local dev (optional)
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
