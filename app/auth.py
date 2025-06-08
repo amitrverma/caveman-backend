@@ -15,23 +15,38 @@ from datetime import datetime, timedelta
 router = APIRouter()
 
 # Init Firebase Admin with logging
+import os
+import json
+from firebase_admin import credentials, initialize_app
+
 firebase_creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
-print("🔐 Firebase credentials loaded from environment.")
+firebase_creds_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
 
 if firebase_creds_json:
+    print("🔐 Firebase credentials loaded from JSON string.")
     try:
         json_dict = json.loads(firebase_creds_json)
-        print("🔍 Firebase project_id:", json_dict.get("project_id"))
         json_dict["private_key"] = json_dict["private_key"].replace("\\n", "\n")
         cred = credentials.Certificate(json_dict)
         initialize_app(cred)
-        print("✅ Firebase Admin SDK initialized.")
+        print("✅ Firebase Admin SDK initialized using inline JSON.")
     except Exception as e:
-        print("❌ Firebase Admin SDK initialization failed:", e)
-        raise RuntimeError("Failed to initialize Firebase Admin SDK")
+        print("❌ Firebase initialization from JSON string failed:", e)
+        raise RuntimeError("Failed to initialize Firebase Admin SDK from JSON string")
+
+elif firebase_creds_path and os.path.exists(firebase_creds_path):
+    print(f"🔐 Firebase credentials loaded from file: {firebase_creds_path}")
+    try:
+        cred = credentials.Certificate(firebase_creds_path)
+        initialize_app(cred)
+        print("✅ Firebase Admin SDK initialized using file path.")
+    except Exception as e:
+        print("❌ Firebase initialization from file failed:", e)
+        raise RuntimeError("Failed to initialize Firebase Admin SDK from file")
+
 else:
-    print("❌ FIREBASE_CREDENTIALS_JSON is missing.")
-    raise RuntimeError("Missing Firebase credentials")
+    print("❌ Firebase credentials not found in environment.")
+    raise RuntimeError("Missing Firebase credentials: set either FIREBASE_CREDENTIALS_JSON or FIREBASE_CREDENTIALS_PATH")
 
 
 # JWT creation helper
