@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from firebase_admin import auth as firebase_auth, credentials, initialize_app
-from app.models import User
+from app.models import User, Waitlist, Participant
 from app.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
@@ -73,24 +73,49 @@ async def firebase_login(request: Request, db: AsyncSession = Depends(get_db)):
         name = decoded_token.get("name", "Anonymous")
         print(f"👤 Firebase user: {email}, {name}")
 
-        # Check if user exists
-        stmt = select(User).where(User.email == email)
+        # Step 1: Check if email is in participants
+        stmt = select(Participant).where(Participant.email == email)
         result = await db.execute(stmt)
-        user = result.scalars().first()
+        participant = result.scalars().first()
 
-        if not user:
-            print("🆕 New user detected. Creating in DB...")
-            user = User(id=uuid.uuid4(), email=email, name=name)
-            db.add(user)
-            await db.commit()
-            await db.refresh(user)
-            print("✅ User created:", user.id)
+        if participant:
+            # Step 2: Check if user already exists in `users`
+            stmt = select(User).where(User.email == email)
+            result = await db.execute(stmt)
+            user = result.scalars().first()
+
+            if not user:
+                print("🆕 Creating user from participant list...")
+                user = User(id=uuid.uuid4(), email=email, name=name)
+                db.add(user)
+                await db.commit()
+                await db.refresh(user)
+
+            jwt_token = create_jwt(user.id)
+            print("🎫 JWT token issued successfully.")
+            return {
+                "token": jwt_token,
+                "user": {"name": user.name, "email": user.email}
+            }
+
         else:
-            print("👤 Existing user found:", user.id)
+            # Not a participant → add to waitlist if not already there
+            print("👀 Not a participant — handling waitlist flow...")
+            stmt = select(Waitlist).where(Waitlist.email == email)
+            result = await db.execute(stmt)
+            existing = result.scalars().first()
 
-        jwt_token = create_jwt(user.id)
-        print("🎫 JWT token issued successfully.")
-        return {"token": jwt_token, "user": {"name": user.name, "email": user.email}}
+            if not existing:
+                waitlist_entry = Waitlist(email=email, name=name)
+                db.add(waitlist_entry)
+                await db.commit()
+                print("📝 Added to waitlist.")
+
+            return {
+                "token": None,
+                "user": {"name": name, "email": email},
+                "preview": True
+            }
 
     except Exception as e:
         print("🔥 Firebase login failed:", e)
