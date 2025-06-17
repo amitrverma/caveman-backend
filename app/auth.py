@@ -95,7 +95,7 @@ async def firebase_login(request: Request, db: AsyncSession = Depends(get_db)):
             print("🎫 JWT token issued successfully.")
             return {
                 "token": jwt_token,
-                "user": {"name": user.name, "email": user.email}
+                "user": { "id": str(user.id),"name": user.name, "email": user.email}
             }
 
         else:

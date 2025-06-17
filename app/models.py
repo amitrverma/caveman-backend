@@ -66,3 +66,12 @@ class MicrochallengeLog(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "challenge_id", "log_date", name="uq_user_challenge_date"),
     )    
+
+class WebPushSubscription(Base):
+    __tablename__ = "web_push_subscriptions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    endpoint = Column(Text, nullable=False, unique=True)
+    keys = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

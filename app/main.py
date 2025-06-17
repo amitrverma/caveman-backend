@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app import database, auth, routes
+from app.Routes import webpush_routes
 from app.database import Base, engine
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -28,3 +29,4 @@ async def on_startup():
 # ✅ Mount routers (perfect mounting structure)
 app.include_router(auth.router, prefix="/auth")
 app.include_router(routes.router, prefix="/api")
+app.include_router(webpush_routes.router, prefix="/api")
