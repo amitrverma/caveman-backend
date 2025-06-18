@@ -9,3 +9,5 @@ pyjwt
 httpx
 authlib
 firebase-admin
+pywebpush
+apscheduler
