@@ -11,3 +11,4 @@ authlib
 firebase-admin
 pywebpush
 apscheduler
+cryptography
