@@ -6,9 +6,11 @@ engine = create_async_engine(settings.DATABASE_URL, echo=True)
 
 engine = create_async_engine(
     settings.DATABASE_URL,
+    echo=False, # Set to True for debugging, False for production
     pool_size=5,
     max_overflow=10,
     pool_recycle=1800,
+    pool_pre_ping=True, # Ensures connections are alive before using them
     pool_timeout=30,
 )
 

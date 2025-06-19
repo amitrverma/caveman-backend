@@ -1,5 +1,6 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Date, JSON, UniqueConstraint, Integer
+from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Date, JSON, UniqueConstraint, Integer, Boolean
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 import uuid
 from datetime import datetime
 from app.database import Base
@@ -75,3 +76,35 @@ class WebPushSubscription(Base):
     endpoint = Column(Text, nullable=False, unique=True)
     keys = Column(JSON, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class IkeaWorksheet(Base):
+    __tablename__ = "ikea_worksheet"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(String, default="active")  # 'active' or 'completed'
+    struggle = Column(Text, nullable=False)
+    identity = Column(Text, nullable=False)
+    knowledge = Column(Text, nullable=False)
+    environment = Column(JSON, nullable=False)  # { easier: "", harder: "" }
+    tiny_action = Column(Text, nullable=False)
+
+    user = relationship("User", backref="ikea_worksheets")
+    tracker_entries = relationship("IkeaTracker", back_populates="worksheet", cascade="all, delete-orphan")
+
+
+class IkeaTracker(Base):
+    __tablename__ = "ikea_tracker"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    worksheet_id = Column(UUID(as_uuid=True), ForeignKey("ikea_worksheet.id"), nullable=False)
+    date = Column(Date, nullable=False)
+    completed = Column(Boolean, nullable=False, default=False)
+    note = Column(Text)
+
+    worksheet = relationship("IkeaWorksheet", back_populates="tracker_entries")
+
+    __table_args__ = (
+        UniqueConstraint("worksheet_id", "date", name="uq_worksheet_date"),
+    )

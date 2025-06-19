@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app import database, auth, routes
-from app.Routes import webpush_routes, notifications_routes
+from app.Routes import webpush_routes, notifications_routes, ikea_routes
 from app.database import Base, engine
 from app.utils.scheduler import start_scheduler
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,3 +33,4 @@ app.include_router(auth.router, prefix="/auth")
 app.include_router(routes.router, prefix="/api")
 app.include_router(webpush_routes.router, prefix="/api")
 app.include_router(notifications_routes.router, prefix="/api")
+app.include_router(ikea_routes.router, prefix="/api", tags=["ikea"])
