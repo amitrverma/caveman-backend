@@ -1,9 +1,16 @@
 from fastapi import FastAPI
 from app import database, auth, routes
-from app.Routes import webpush_routes, notifications_routes, ikea_routes
+from app.Routes import webpush_routes, notifications_routes, ikea_routes, reflections_routes
 from app.database import Base, engine
 from app.utils.scheduler import start_scheduler
 from fastapi.middleware.cors import CORSMiddleware
+import openai
+import os
+
+# ✅ Set OpenAI API key globally
+openai.api_key = os.getenv("OPENAI_API_KEY")
+if not openai.api_key:
+    raise RuntimeError("OpenAI API key not set. Please define OPENAI_API_KEY in environment.")
 
 app = FastAPI()
 
@@ -34,3 +41,4 @@ app.include_router(routes.router, prefix="/api")
 app.include_router(webpush_routes.router, prefix="/api")
 app.include_router(notifications_routes.router, prefix="/api")
 app.include_router(ikea_routes.router, prefix="/api", tags=["ikea"])
+app.include_router(reflections_routes.router, prefix="/api", tags=["reflections"])

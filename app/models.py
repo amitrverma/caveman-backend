@@ -108,3 +108,25 @@ class IkeaTracker(Base):
     __table_args__ = (
         UniqueConstraint("worksheet_id", "date", name="uq_worksheet_date"),
     )
+
+class BehavioralNudge(Base):
+    __tablename__ = "behavioral_nudges"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    title = Column(String, nullable=True)             # Optional, e.g. "💡 Nudge of the Day"
+    paragraphs = Column(JSON, nullable=False)         # Array of paragraph strings
+    quote = Column(Text, nullable=True)               # Highlighted quote block
+    link = Column(String, nullable=True)              # Optional blog/article/resource URL
+    is_active = Column(Boolean, default=True)         # Only active nudges are served
+    created_at = Column(DateTime, default=datetime.utcnow)    
+
+class WeeklyReflection(Base):
+    __tablename__ = "weekly_reflections"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    week_start = Column(Date, nullable=False)
+    week_end = Column(Date, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -3,13 +3,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import and_
 from app.database import get_db
-from app.models import CavemanSpot, MicrochallengeDefinition, MicrochallengeLog
+from app.models import CavemanSpot, MicrochallengeDefinition, MicrochallengeLog, BehavioralNudge
 from app.schemas import SpotCreate, SpotResponse
 from datetime import datetime, date
 import uuid
 import jwt
 from app.config import settings
 from typing import Optional
+from app.helper.common import get_random_active_nudge
 
 router = APIRouter()
 
@@ -199,4 +200,16 @@ async def get_challenge_by_id(challenge_id: uuid.UUID, db: AsyncSession = Depend
         "closing": challenge.closing,
         "start_date": challenge.start_date.isoformat(),
         "end_date": challenge.end_date.isoformat() if challenge.end_date else None,
+    }
+
+@router.get("/nudges/random")
+async def get_random_nudge(db: AsyncSession = Depends(get_db)):
+    nudge = await get_random_active_nudge(db)
+
+    return {
+        "id": str(nudge.id),
+        "title": nudge.title,
+        "paragraphs": nudge.paragraphs,
+        "quote": nudge.quote,
+        "link": nudge.link,
     }

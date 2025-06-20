@@ -6,19 +6,21 @@ from app.database import get_db
 from app.utils.pushnotification import send_push
 from app.utils.reminder_engine import send_spot_pushes, send_microchallenge_pushes
 import json
+from app.helper.common import get_random_active_nudge
 
 router = APIRouter()
 
 @router.post("/send-daily-nudge")
 async def send_daily_nudge(db: AsyncSession = Depends(get_db)):
-    stmt = select(WebPushSubscription)
-    result = await db.execute(stmt)
-    subs = result.scalars().all()
+    nudge = await get_random_active_nudge(db)
 
     payload = {
-        "title": "🧠 Daily Caveman Nudge",
-        "body": "Mismatch of the day: your brain still treats status like survival. Choose your focus wisely."
+        "title": nudge.title or "🧠 Caveman Nudge",
+        "body": nudge.quote or nudge.paragraphs[0]  # fallback
     }
+
+    result = await db.execute(select(WebPushSubscription))
+    subs = result.scalars().all()
 
     success = 0
     for sub in subs:
@@ -30,7 +32,12 @@ async def send_daily_nudge(db: AsyncSession = Depends(get_db)):
         if result:
             success += 1
 
-    return {"message": f"Sent {success} pushes"}
+    return {
+        "message": f"Sent {success} pushes",
+        "nudge_id": str(nudge.id),
+        "preview": payload
+    }
+
 
 
 @router.post("/push-spot")
