@@ -9,7 +9,19 @@ def send_push(subscription: dict, payload: str):
             vapid_private_key=settings.VAPID_PRIVATE_KEY,
             vapid_claims={"sub": f"mailto:{settings.VAPID_CLAIMS_EMAIL}"}
         )
+        print(f"✅ Push sent: {subscription['endpoint']}, Status: {response.status_code}")
         return response
     except WebPushException as ex:
-        print(f"🔥 Web push failed for {subscription['endpoint']}: {ex}")
+        status_code = getattr(ex.response, "status_code", None)
+        print(f"🔥 Web push failed: {subscription['endpoint']} | Status: {status_code} | Error: {str(ex)}")
+
+        if status_code == 410:
+            print("💀 Subscription is gone — delete from DB.")
+        elif status_code == 404:
+            print("❌ Subscription not found.")
+        elif status_code == 400:
+            print("⚠️ Malformed subscription or payload.")
+        elif status_code == 401:
+            print("🔐 Auth/VAPID key issue.")
         return None
+
