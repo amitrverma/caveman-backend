@@ -10,6 +10,8 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, index=True)
     name = Column(String)
+    phone_number = Column(String, unique=True, index=True)
+    whatsapp_opt_in = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class CavemanSpot(Base):

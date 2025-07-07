@@ -14,3 +14,4 @@ apscheduler
 cryptography
 pytz
 openai
+python-multipart
