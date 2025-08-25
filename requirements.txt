@@ -15,3 +15,6 @@ cryptography
 pytz
 openai
 python-multipart
+email-validator
+python-jose[cryptography]
+bcrypt

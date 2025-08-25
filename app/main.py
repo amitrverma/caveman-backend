@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from app import database, auth, routes
-from app.Routes import webpush_routes, notifications_routes, ikea_routes, reflections_routes, whatsapp_routes
+from app.Routes import webpush_routes, notifications_routes, ikea_routes, reflections_routes, whatsapp_routes, newsletter_routes , auth_routes , article_routes
 from app.database import Base, engine
 from app.utils.scheduler import start_scheduler
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,3 +43,6 @@ app.include_router(notifications_routes.router, prefix="/api")
 app.include_router(ikea_routes.router, prefix="/api", tags=["ikea"])
 app.include_router(reflections_routes.router, prefix="/api", tags=["reflections"])
 app.include_router(whatsapp_routes.router, prefix="/wa" , tags=["whatsapp"])  # or "/wa" if you want a namespace
+app.include_router(newsletter_routes.router, prefix="/api", tags=["newsletter"])
+app.include_router(auth_routes.router, prefix="/auth", tags=["auth"])
+app.include_router(article_routes.router, prefix="/articles", tags=["saved"])
