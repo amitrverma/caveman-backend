@@ -144,5 +144,4 @@ async def firebase_login(request: Request, db: AsyncSession = Depends(get_db)):
             }
 
     except Exception as e:
-        print("Firebase login failed:", e)
         raise HTTPException(status_code=401, detail="Invalid Firebase token")
