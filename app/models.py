@@ -47,18 +47,26 @@ class MicrochallengeDefinition(Base):
     __tablename__ = "microchallenge_definitions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    week_number = Column(Integer, nullable=False, unique=True)  # ✅ New field added
     title = Column(Text, nullable=False)
     intro = Column(JSON, nullable=False)           # Array of paragraphs
     instructions = Column(JSON, nullable=False)    # Array of steps
     why = Column(Text, nullable=False)
     tips = Column(JSON, nullable=False)            # Array of tips
     closing = Column(Text, nullable=False)
-    start_date = Column(Date, nullable=False)
-    end_date = Column(Date)
     created_at = Column(DateTime, default=datetime.utcnow)
+    user_challenges = relationship("UserMicrochallenge", back_populates="challenge")
 
+class UserMicrochallenge(Base):
+    __tablename__ = "user_microchallenges"
 
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    challenge_id = Column(UUID(as_uuid=True), ForeignKey("microchallenge_definitions.id"), nullable=False)
+    status = Column(String, default="assigned")  # assigned / in_progress / completed
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    challenge = relationship("MicrochallengeDefinition", back_populates="user_challenges")
 
 class MicrochallengeLog(Base):
     __tablename__ = "microchallenge_logs"

@@ -11,33 +11,23 @@ import jwt
 from app.config import settings
 from typing import Optional
 from app.helper.common import get_random_active_nudge
+from app.utils.auth import get_current_user
 
 router = APIRouter()
 
 FAKE_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")  # TODO: Replace with real user from JWT
 
-def get_current_user(authorization: str = Header(...)):
-    try:
-        scheme, token = authorization.split()
-        if scheme.lower() != "bearer":
-            raise ValueError("Invalid auth scheme")
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-        return uuid.UUID(payload["sub"])  # returning UUID not string now
-    except Exception as e:
-        print("JWT decode error:", e)
-        raise HTTPException(status_code=401, detail="Invalid or missing token")
-
 ### ✅ CavemanSpot routes remain unchanged ###
 
-@router.post("/spots", response_model=SpotResponse)
+@router.post("/spots")
 async def create_spot(
     spot: SpotCreate,
     db: AsyncSession = Depends(get_db),
-    user_id: uuid.UUID = Depends(get_current_user)
+    current_user: uuid.UUID = Depends(get_current_user)
 ):
     try:
         new_spot = CavemanSpot(
-            user_id=user_id,
+            user_id=current_user.id,
             description=spot.description,
             date=spot.date or date.today(),
             created_at=datetime.utcnow(),
@@ -45,21 +35,45 @@ async def create_spot(
         db.add(new_spot)
         await db.commit()
         await db.refresh(new_spot)
+        print("Created new spot:", new_spot)
         return new_spot
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to create spot: {str(e)}")
 
-@router.get("/spots", response_model=list[SpotResponse])
+@router.get("/spots")
 async def get_spots(
     db: AsyncSession = Depends(get_db),
-    user_id: uuid.UUID = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
-    result = await db.execute(
-        select(CavemanSpot).where(CavemanSpot.user_id == user_id).order_by(CavemanSpot.date.desc())
-    )
-    return result.scalars().all()
+    print(f"🔍 ROUTE: get_spots called successfully!")
+    print(f"🔍 ROUTE: User: {current_user}")
+    print(f"🔍 ROUTE: User ID: {current_user.id}")
+    print(f"🔍 ROUTE: User type: {type(current_user)}")
+    
+    try:
+        print(f"🔍 ROUTE: Executing database query...")
+        result = await db.execute(
+            select(CavemanSpot).where(CavemanSpot.user_id == current_user.id).order_by(CavemanSpot.date.desc())
+        )
+        print(f"🔍 ROUTE: Database query executed")
+        
+        spots = result.scalars().all()
+        print(f"🔍 ROUTE: Found {len(spots)} spots")
+        
+        # Convert to list for JSON serialization
+        spots_list = list(spots)
+        print(f"🔍 ROUTE: Converted to list: {len(spots_list)} spots")
+        
+        print(f"✅ ROUTE: Returning spots successfully")
+        return spots_list
+        
+    except Exception as e:
+        print(f"❌ ROUTE: Error in database query: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 ### 🔥 ✅ Microchallenge routes start here ✅ 🔥
 

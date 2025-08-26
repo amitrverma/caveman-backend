@@ -51,29 +51,57 @@ async def get_current_user(
     """
     Extract the user from a Bearer token.
     """
+    print(f"🔍 AUTH: Function called")
+    print(f"🔍 AUTH: Credentials: {credentials}")
+    
+    if not credentials:
+        print("❌ AUTH: No credentials provided")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No credentials provided",
+        )
+    
     token = credentials.credentials
+    print(f"🔍 AUTH: Token extracted: {token[:20] if token else 'None'}...")
+    
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        print(f"🔍 AUTH: JWT decoded successfully")
+        
         user_id: str = payload.get("sub")
+        print(f"🔍 AUTH: User ID from token: {user_id}")
+        
         if not user_id:
+            print("❌ AUTH: No user_id in token")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token: missing subject",
             )
         
         # Fetch user from DB
+        print(f"🔍 AUTH: Looking up user in database...")
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
+        
         if not user:
+            print(f"❌ AUTH: User {user_id} not found in database")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found",
             )
 
+        print(f"✅ AUTH: User found: {user.id}")
         return user
 
-    except JWTError:
+    except JWTError as e:
+        print(f"❌ AUTH: JWT Error: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
+        )
+    except Exception as e:
+        print(f"❌ AUTH: Unexpected error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed",
         )
