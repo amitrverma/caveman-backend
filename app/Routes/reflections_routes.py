@@ -10,13 +10,13 @@ from app.models import (
     WeeklyReflection, User, IkeaWorksheet, IkeaTracker,
     MicrochallengeLog, MicrochallengeDefinition, CavemanSpot
 )
-from app.routes import get_current_user
+from app.utils.auth import get_current_user
 
 router = APIRouter()
 
 @router.post("/weekly-reflection/generate")
 async def generate_weekly_reflection(
-    user_id: uuid.UUID = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     today = datetime.utcnow().date()
@@ -24,7 +24,7 @@ async def generate_weekly_reflection(
     week_end = week_start + timedelta(days=6)
 
     worksheet_result = await db.execute(
-        select(IkeaWorksheet).where(IkeaWorksheet.user_id == user_id).order_by(IkeaWorksheet.created_at.desc())
+        select(IkeaWorksheet).where(IkeaWorksheet.user_id == current_user.id).order_by(IkeaWorksheet.created_at.desc())
     )
     worksheet = worksheet_result.scalars().first()
 
@@ -44,7 +44,7 @@ async def generate_weekly_reflection(
         select(MicrochallengeLog, MicrochallengeDefinition)
         .join(MicrochallengeDefinition, MicrochallengeLog.challenge_id == MicrochallengeDefinition.id)
         .where(
-            MicrochallengeLog.user_id == user_id,
+            MicrochallengeLog.user_id == current_user.id,
             MicrochallengeLog.log_date >= week_start,
             MicrochallengeLog.log_date <= week_end
         )
@@ -53,7 +53,7 @@ async def generate_weekly_reflection(
 
     spot_result = await db.execute(
         select(CavemanSpot).where(
-            CavemanSpot.user_id == user_id,
+            CavemanSpot.user_id == current_user.id,
             CavemanSpot.date >= week_start,
             CavemanSpot.date <= week_end
         )
@@ -96,7 +96,7 @@ Tracker Completions:
         raise HTTPException(status_code=500, detail=f"OpenAI error: {str(e)}")
 
     reflection = WeeklyReflection(
-        user_id=user_id,
+        user_id=current_user.id,
         content=reflection_text,
         week_start=week_start,
         week_end=week_end
@@ -109,12 +109,12 @@ Tracker Completions:
 
 @router.get("/weekly-reflection/latest")
 async def get_latest_weekly_reflection(
-    user_id: uuid.UUID = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(
         select(WeeklyReflection)
-        .where(WeeklyReflection.user_id == user_id)
+        .where(WeeklyReflection.user_id == current_user.id)
         .order_by(WeeklyReflection.created_at.desc())
     )
     latest = result.scalars().first()

@@ -1,32 +1,70 @@
 # app/routers/microchallenges.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.database import get_db
-from app.models import MicrochallengeDefinition, UserMicrochallenge, User
-from datetime import datetime
+from app.models import (
+    MicrochallengeDefinition,
+    UserMicrochallenge,
+    User,
+    MicrochallengeLog,
+)
+from datetime import datetime, date
 from uuid import UUID
 from app.utils.auth import get_current_user  # ✅ returns a User object
+from pydantic import BaseModel
+from typing import Optional
 
 router = APIRouter()
 
-# 🔹 List all challenges
+
 @router.get("/")
-async def list_microchallenges(db: AsyncSession = Depends(get_db)):
+async def list_challenges(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(MicrochallengeDefinition).where(MicrochallengeDefinition.active == True)
+        select(MicrochallengeDefinition).order_by(MicrochallengeDefinition.start_date)
     )
     challenges = result.scalars().all()
     return [
         {
             "id": str(c.id),
             "title": c.title,
-            "description": c.description,
-            "active": c.active,
-            "created_at": c.created_at,
+            "start_date": c.start_date.isoformat(),
+            "end_date": c.end_date.isoformat() if c.end_date else None,
         }
         for c in challenges
     ]
+
+
+@router.get("/active")
+async def get_active_challenge(db: AsyncSession = Depends(get_db)):
+    today = date.today()
+    result = await db.execute(
+        select(MicrochallengeDefinition)
+        .where(
+            (MicrochallengeDefinition.start_date <= today)
+            & (
+                (MicrochallengeDefinition.end_date.is_(None))
+                | (MicrochallengeDefinition.end_date >= today)
+            )
+        )
+        .order_by(MicrochallengeDefinition.start_date)
+        .limit(1)
+    )
+    challenge = result.scalar_one_or_none()
+    if not challenge:
+        raise HTTPException(status_code=404, detail="No active microchallenge found")
+    return {
+        "id": str(challenge.id),
+        "week_number": challenge.week_number,
+        "title": challenge.title,
+        "intro": challenge.intro,
+        "instructions": challenge.instructions,
+        "why": challenge.why,
+        "tips": challenge.tips,
+        "closing": challenge.closing,
+        "start_date": challenge.start_date.isoformat(),
+        "end_date": challenge.end_date.isoformat() if challenge.end_date else None,
+    }
 
 
 # 🔹 Assign challenge to user
@@ -124,6 +162,71 @@ async def complete_microchallenge(
     }
 
 
+class LogTodayRequest(BaseModel):
+    challenge_id: UUID
+    note: Optional[str] = ""
+
+
+@router.post("/log")
+async def log_today(
+    payload: LogTodayRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    today = date.today()
+    result = await db.execute(
+        select(MicrochallengeLog).where(
+            MicrochallengeLog.user_id == current_user.id,
+            MicrochallengeLog.challenge_id == payload.challenge_id,
+            MicrochallengeLog.log_date == today,
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        return {"message": "Already logged for today"}
+
+    new_log = MicrochallengeLog(
+        user_id=current_user.id,
+        challenge_id=payload.challenge_id,
+        log_date=today,
+        note=payload.note or "",
+        created_at=datetime.utcnow(),
+    )
+
+    db.add(new_log)
+    await db.commit()
+    return {"message": "Log successful"}
+
+
+@router.get("/progress")
+async def get_progress(
+    challenge_id: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        challenge_uuid = UUID(challenge_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid UUID")
+
+    result = await db.execute(
+        select(MicrochallengeLog)
+        .where(
+            MicrochallengeLog.user_id == current_user.id,
+            MicrochallengeLog.challenge_id == challenge_uuid,
+        )
+        .order_by(MicrochallengeLog.log_date.desc())
+    )
+    logs = result.scalars().all()
+    return {
+        "completed_days": len(logs),
+        "notes": [
+            {"date": log.log_date.isoformat(), "note": log.note or ""}
+            for log in logs
+        ],
+    }
+
+
 @router.get("/{challenge_id}")
 async def get_challenge(
     challenge_id: UUID,
@@ -144,4 +247,6 @@ async def get_challenge(
         "why": challenge.why,
         "tips": challenge.tips,
         "closing": challenge.closing,
+        "start_date": challenge.start_date.isoformat(),
+        "end_date": challenge.end_date.isoformat() if challenge.end_date else None,
     }

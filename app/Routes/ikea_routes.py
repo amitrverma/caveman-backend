@@ -6,8 +6,8 @@ from sqlalchemy import select, update, Boolean
 from uuid import uuid4, UUID
 from datetime import date, datetime
 from app.database import get_db
-from app.models import IkeaWorksheet, IkeaTracker
-from app.routes import get_current_user  # align with existing pattern
+from app.models import IkeaWorksheet, IkeaTracker, User
+from app.utils.auth import get_current_user
 
 router = APIRouter()
 
@@ -15,7 +15,7 @@ router = APIRouter()
 @router.post("/ikea/worksheet")
 async def save_worksheet(
     db: AsyncSession = Depends(get_db),
-    user_id: UUID = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     struggle: str = Body(...),
     identity: str = Body(...),
     knowledge: str = Body(...),
@@ -24,13 +24,13 @@ async def save_worksheet(
 ):
     await db.execute(
         update(IkeaWorksheet)
-        .where(IkeaWorksheet.user_id == user_id, IkeaWorksheet.status == 'active')
+        .where(IkeaWorksheet.user_id == current_user.id, IkeaWorksheet.status == 'active')
         .values(status='completed')
     )
 
     worksheet = IkeaWorksheet(
         id=uuid4(),
-        user_id=user_id,
+        user_id=current_user.id,
         created_at=datetime.utcnow(),
         status='active',
         struggle=struggle,
@@ -47,10 +47,10 @@ async def save_worksheet(
 @router.get("/ikea/worksheet/active")
 async def get_active_worksheet(
     db: AsyncSession = Depends(get_db),
-    user_id: UUID = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     result = await db.execute(
-        select(IkeaWorksheet).where(IkeaWorksheet.user_id == user_id, IkeaWorksheet.status == 'active').limit(1)
+        select(IkeaWorksheet).where(IkeaWorksheet.user_id == current_user.id, IkeaWorksheet.status == 'active').limit(1)
     )
     worksheet = result.scalar_one_or_none()
     if not worksheet:
@@ -147,11 +147,11 @@ async def add_note(worksheet_id: UUID, body: dict = Body(...), db: AsyncSession 
 @router.get("/ikea/worksheet/history")
 async def get_worksheet_history(
     db: AsyncSession = Depends(get_db),
-    user_id: UUID = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     result = await db.execute(
         select(IkeaWorksheet)
-        .where(IkeaWorksheet.user_id == user_id, IkeaWorksheet.status == 'completed')
+        .where(IkeaWorksheet.user_id == current_user.id, IkeaWorksheet.status == 'completed')
         .order_by(IkeaWorksheet.created_at.desc())
     )
     worksheets = result.scalars().all()
@@ -168,11 +168,11 @@ async def get_worksheet_history(
 async def get_worksheet_detail(
     worksheet_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user_id: UUID = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     result = await db.execute(
         select(IkeaWorksheet)
-        .where(IkeaWorksheet.id == worksheet_id, IkeaWorksheet.user_id == user_id)
+        .where(IkeaWorksheet.id == worksheet_id, IkeaWorksheet.user_id == current_user.id)
     )
     worksheet = result.scalar_one_or_none()
     if not worksheet:

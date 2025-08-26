@@ -1,6 +1,18 @@
 from fastapi import FastAPI
-from app import database, auth, routes
-from app.Routes import webpush_routes, notifications_routes, ikea_routes, reflections_routes, whatsapp_routes, newsletter_routes , auth_routes , article_routes , challenge_routes
+from app import database
+from app.Routes import (
+    webpush_routes,
+    notifications_routes,
+    ikea_routes,
+    reflections_routes,
+    whatsapp_routes,
+    newsletter_routes,
+    auth_routes,
+    article_routes,
+    challenge_routes,
+    spot_routes,
+    nudge_routes,
+)
 from app.database import Base, engine
 from app.utils.scheduler import start_scheduler 
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,14 +48,14 @@ async def on_startup():
     start_scheduler()  # ✅ Start APScheduler
 
 # ✅ Mount routers (perfect mounting structure)
-app.include_router(auth.router, prefix="/auth")
-app.include_router(routes.router, prefix="/api")
 app.include_router(webpush_routes.router, prefix="/api")
 app.include_router(notifications_routes.router, prefix="/api")
 app.include_router(ikea_routes.router, prefix="/api", tags=["ikea"])
 app.include_router(reflections_routes.router, prefix="/api", tags=["reflections"])
-app.include_router(whatsapp_routes.router, prefix="/wa" , tags=["whatsapp"])  # or "/wa" if you want a namespace
+app.include_router(whatsapp_routes.router, prefix="/wa", tags=["whatsapp"])  # or "/wa" if you want a namespace
 app.include_router(newsletter_routes.router, prefix="/api", tags=["newsletter"])
 app.include_router(auth_routes.router, prefix="/auth", tags=["auth"])
 app.include_router(article_routes.router, prefix="/articles", tags=["saved"])
 app.include_router(challenge_routes.router, prefix="/challenges", tags=["microchallenge"])
+app.include_router(spot_routes.router, prefix="/api", tags=["spots"])
+app.include_router(nudge_routes.router, prefix="/api", tags=["nudges"])
