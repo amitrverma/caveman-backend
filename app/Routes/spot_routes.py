@@ -1,49 +1,49 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.database import get_db
 from app.models import CavemanSpot, User
 from app.utils.auth import get_current_user
-from pydantic import BaseModel
 from datetime import date, datetime
 import uuid
 
 router = APIRouter(prefix="/spots")
 
-class SpotCreate(BaseModel):
-    description: str
-    date: date | None = None
-
-class SpotResponse(BaseModel):
-    id: uuid.UUID
-    description: str
-    date: date
-    created_at: datetime
-
-    class Config:
-        orm_mode = True
-
-@router.post("/", response_model=SpotResponse)
+@router.post("/")
 async def create_spot(
-    spot: SpotCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     try:
+        body = await request.json()
+        description = body.get("description")
+        spot_date = body.get("date")
+
+        if not description:
+            raise HTTPException(status_code=400, detail="Description is required")
+
         new_spot = CavemanSpot(
             user_id=current_user.id,
-            description=spot.description,
-            date=spot.date or date.today(),
+            description=description,
+            date=date.fromisoformat(spot_date) if spot_date else date.today(),
             created_at=datetime.utcnow(),
         )
         db.add(new_spot)
         await db.commit()
         await db.refresh(new_spot)
-        return new_spot
+
+        return {
+            "id": str(new_spot.id),
+            "description": new_spot.description,
+            "date": new_spot.date,
+            "created_at": new_spot.created_at,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create spot: {e}")
 
-@router.get("/", response_model=list[SpotResponse])
+
+@router.get("/")
 async def get_spots(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -55,6 +55,15 @@ async def get_spots(
             .order_by(CavemanSpot.date.desc())
         )
         spots = result.scalars().all()
-        return list(spots)
+
+        return [
+            {
+                "id": str(s.id),
+                "description": s.description,
+                "date": s.date,
+                "created_at": s.created_at,
+            }
+            for s in spots
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
