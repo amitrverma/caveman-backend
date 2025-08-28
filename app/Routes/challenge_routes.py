@@ -21,49 +21,37 @@ router = APIRouter()
 @router.get("/")
 async def list_challenges(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(MicrochallengeDefinition).order_by(MicrochallengeDefinition.start_date)
+        select(MicrochallengeDefinition).order_by(MicrochallengeDefinition.created_at)
     )
     challenges = result.scalars().all()
     return [
         {
             "id": str(c.id),
             "title": c.title,
-            "start_date": c.start_date.isoformat(),
-            "end_date": c.end_date.isoformat() if c.end_date else None,
+            "created_at": c.created_at.isoformat(),
         }
         for c in challenges
     ]
 
 
+
 @router.get("/active")
 async def get_active_challenge(db: AsyncSession = Depends(get_db)):
-    today = date.today()
     result = await db.execute(
-        select(MicrochallengeDefinition)
-        .where(
-            (MicrochallengeDefinition.start_date <= today)
-            & (
-                (MicrochallengeDefinition.end_date.is_(None))
-                | (MicrochallengeDefinition.end_date >= today)
-            )
-        )
-        .order_by(MicrochallengeDefinition.start_date)
-        .limit(1)
+        select(MicrochallengeDefinition).order_by(MicrochallengeDefinition.created_at.desc()).limit(1)
     )
     challenge = result.scalar_one_or_none()
     if not challenge:
         raise HTTPException(status_code=404, detail="No active microchallenge found")
     return {
         "id": str(challenge.id),
-        "week_number": challenge.week_number,
         "title": challenge.title,
         "intro": challenge.intro,
         "instructions": challenge.instructions,
         "why": challenge.why,
         "tips": challenge.tips,
         "closing": challenge.closing,
-        "start_date": challenge.start_date.isoformat(),
-        "end_date": challenge.end_date.isoformat() if challenge.end_date else None,
+        "created_at": challenge.created_at.isoformat(),
     }
 
 
@@ -247,6 +235,6 @@ async def get_challenge(
         "why": challenge.why,
         "tips": challenge.tips,
         "closing": challenge.closing,
-        "start_date": challenge.start_date.isoformat(),
-        "end_date": challenge.end_date.isoformat() if challenge.end_date else None,
+        "created_at": challenge.created_at.isoformat(),
     }
+

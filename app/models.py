@@ -153,12 +153,29 @@ class NewsletterSubscriber(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+class Article(Base):
+    __tablename__ = "articles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    slug = Column(String, unique=True, index=True, nullable=False)   # maps to .mdx filename
+    title = Column(String, nullable=False)
+    excerpt = Column(Text, nullable=True)
+
+    read_count = Column(Integer, default=0)
+    save_count = Column(Integer, default=0)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
 class SavedArticle(Base):
     __tablename__ = "saved_articles"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    article_slug = Column(String, nullable=False)  # slug or unique identifier
-    title = Column(String, nullable=True)          # ✅ add title
-    excerpt = Column(String, nullable=True)        # ✅ add excerpt
+    article_id = Column(UUID(as_uuid=True), ForeignKey("articles.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "article_id", name="uq_user_article"),
+    )
