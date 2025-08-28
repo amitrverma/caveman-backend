@@ -18,3 +18,5 @@ python-multipart
 email-validator
 python-jose[cryptography]
 bcrypt
+pytest
+pytest-asyncio

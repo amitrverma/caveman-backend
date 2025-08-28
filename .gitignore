@@ -21,3 +21,7 @@ Thumbs.db
 # Node (if using JS tools)
 node_modules/
 "firebase_key.json" 
+
+# Code coverage reports
+.coverage
+htmlcov/
