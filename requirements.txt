@@ -20,3 +20,4 @@ python-jose[cryptography]
 bcrypt
 pytest
 pytest-asyncio
+posthog
