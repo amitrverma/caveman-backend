@@ -8,6 +8,7 @@ from datetime import date, datetime
 from app.database import get_db
 from app.models import IkeaWorksheet, IkeaTracker, User
 from app.utils.auth import get_current_user
+from app.analytics.posthog_client import track_event
 
 router = APIRouter()
 
@@ -41,6 +42,7 @@ async def save_worksheet(
     )
     db.add(worksheet)
     await db.commit()
+    track_event(str(current_user.id), "ikea_worksheet_saved", {"worksheet_id": str(worksheet.id)})
     return {"id": str(worksheet.id)}
 
 # 2. Get current active worksheet (for tracker)
@@ -88,6 +90,7 @@ async def toggle_tracker(
     if existing:
         existing.completed = not existing.completed
         await db.commit()
+        track_event(None, "ikea_tracker_toggled", {"worksheet_id": str(worksheet_id), "completed": existing.completed})
         return {"completed": existing.completed}
     else:
         entry = IkeaTracker(
@@ -99,6 +102,7 @@ async def toggle_tracker(
         )
         db.add(entry)
         await db.commit()
+        track_event(None, "ikea_tracker_toggled", {"worksheet_id": str(worksheet_id), "completed": True})
         return {"completed": True}
 
 # 4. Get tracker streak or history (optional)
@@ -142,6 +146,7 @@ async def add_note(worksheet_id: UUID, body: dict = Body(...), db: AsyncSession 
         db.add(entry)
 
     await db.commit()
+    track_event(None, "ikea_note_added", {"worksheet_id": str(worksheet_id), "date": date_str})
     return {"success": True, "date": date_str, "note": note}
 
 @router.get("/ikea/worksheet/history")

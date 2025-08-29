@@ -7,6 +7,7 @@ from app.models import Article, SavedArticle, User
 from app.utils.auth import get_current_user
 import uuid
 from datetime import datetime
+from app.analytics.posthog_client import track_event
 
 router = APIRouter()
 
@@ -43,6 +44,7 @@ async def save_article(
     db.add(saved)
     article.save_count += 1  # ✅ increment global counter
     await db.commit()
+    track_event(str(current_user.id), "article_saved", {"slug": slug})
 
     return {"status": "saved", "save_count": article.save_count}
 
@@ -101,6 +103,7 @@ async def unsave_article(
     await db.delete(saved)
     article.save_count = max(0, article.save_count - 1)  # ✅ decrement safely
     await db.commit()
+    track_event(str(current_user.id), "article_unsaved", {"slug": slug})
 
     return {"status": "removed", "save_count": article.save_count}
 
@@ -159,4 +162,5 @@ async def increment_article_read(slug: str, db: AsyncSession = Depends(get_db)):
     article.read_count += 1
     article.updated_at = datetime.utcnow()
     await db.commit()
+    track_event(None, "article_read", {"slug": slug})
     return {"slug": slug, "read_count": article.read_count}

@@ -14,6 +14,7 @@ from uuid import UUID
 from app.utils.auth import get_current_user  # ✅ returns a User object
 from pydantic import BaseModel
 from typing import Optional
+from app.analytics.posthog_client import track_event
 
 router = APIRouter()
 
@@ -73,6 +74,7 @@ async def assign_microchallenge(
     db.add(mapping)
     await db.commit()
     await db.refresh(mapping)
+    track_event(str(current_user.id), "challenge_assigned", {"challenge_id": str(challenge_id)})
 
     return {
         "id": str(mapping.id),
@@ -141,6 +143,7 @@ async def complete_microchallenge(
     db.add(mapping)
     await db.commit()
     await db.refresh(mapping)
+    track_event(str(current_user.id), "challenge_completed", {"challenge_id": str(challenge_id)})
 
     return {
         "id": str(mapping.id),
@@ -183,6 +186,7 @@ async def log_today(
 
     db.add(new_log)
     await db.commit()
+    track_event(str(current_user.id), "challenge_logged", {"challenge_id": str(payload.challenge_id)})
     return {"message": "Log successful"}
 
 

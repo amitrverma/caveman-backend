@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models import NewsletterSubscriber
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from app.analytics.posthog_client import track_event
 
 router = APIRouter()
 
@@ -26,4 +27,5 @@ async def subscribe(request: SubscribeRequest, db: AsyncSession = Depends(get_db
     subscriber = NewsletterSubscriber(email=request.email, created_at=datetime.utcnow())
     db.add(subscriber)
     await db.commit()
+    track_event(request.email, "newsletter_subscribed")
     return {"status": "subscribed"}

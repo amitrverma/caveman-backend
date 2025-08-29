@@ -11,5 +11,7 @@ class Settings:
     GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
     VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
     VAPID_CLAIMS_EMAIL = os.getenv("VAPID_CLAIMS_EMAIL")
+    POSTHOG_API_KEY = os.getenv("POSTHOG_API_KEY", "")
+    POSTHOG_HOST = os.getenv("POSTHOG_HOST")
 
 settings = Settings()

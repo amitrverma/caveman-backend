@@ -16,6 +16,7 @@ import os
 from datetime import datetime
 
 from firebase_admin import auth as firebase_auth, credentials, initialize_app
+from app.analytics.posthog_client import track_event, identify_user
 
 firebase_creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
 firebase_creds_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
@@ -65,6 +66,8 @@ async def signup(req: AuthRequest, db: AsyncSession = Depends(get_db)):
     await db.refresh(user)
 
     token = create_access_token({"sub": str(user.id)})
+    identify_user(str(user.id), {"email": user.email})
+    track_event(str(user.id), "user_signup")
     return {"token": token, "user": {"id": str(user.id), "email": user.email}}
 
 @router.post("/login")
@@ -79,6 +82,7 @@ async def login(req: AuthRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_access_token({"sub": str(user.id)})
+    track_event(str(user.id), "user_login")
     return {"token": token, "user": {"id": str(user.id), "email": user.email}}
 
 @router.get("/me")
@@ -122,6 +126,8 @@ async def firebase_login(request: Request, db: AsyncSession = Depends(get_db)):
                 await db.refresh(user)
 
             jwt_token = create_access_token({"sub": str(user.id)})
+            # identify_user(str(user.id), {"email": user.email, "name": user.name})
+            track_event(str(user.id), "user_login", {"method": "firebase"})
             return {
                 "token": jwt_token,
                 "user": {"id": str(user.id), "name": user.name, "email": user.email}
@@ -137,6 +143,7 @@ async def firebase_login(request: Request, db: AsyncSession = Depends(get_db)):
                 db.add(waitlist_entry)
                 await db.commit()
 
+            track_event(email, "firebase_preview")
             return {
                 "token": None,
                 "user": {"name": name, "email": email},

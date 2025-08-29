@@ -6,6 +6,7 @@ from app.models import CavemanSpot, User
 from app.utils.auth import get_current_user
 from datetime import date, datetime
 import uuid
+from app.analytics.posthog_client import track_event
 
 router = APIRouter(prefix="/spots")
 
@@ -32,6 +33,7 @@ async def create_spot(
         db.add(new_spot)
         await db.commit()
         await db.refresh(new_spot)
+        track_event(str(current_user.id), "spot_created")
 
         return {
             "id": str(new_spot.id),
