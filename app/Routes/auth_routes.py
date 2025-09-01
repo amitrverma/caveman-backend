@@ -16,6 +16,7 @@ import os
 from datetime import datetime
 
 from firebase_admin import auth as firebase_auth, credentials, initialize_app
+from firebase_admin import auth as firebase_auth, exceptions
 from app.analytics.posthog_client import track_event, identify_user
 
 firebase_creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
@@ -100,16 +101,39 @@ async def firebase_login(request: Request, db: AsyncSession = Depends(get_db)):
         body = await request.json()
         id_token = body.get("idToken")
 
-        decoded_token = firebase_auth.verify_id_token(id_token)
+        if not id_token:
+            raise HTTPException(status_code=400, detail="Missing idToken")
+
+        print("🛠️ [Backend] Received token:", id_token[:30], "...", len(id_token))
+
+        try:
+            decoded_token = firebase_auth.verify_id_token(id_token, clock_skew_seconds=60)
+        except exceptions.InvalidIdTokenError:
+            print("❌ [Backend] Invalid Firebase token")
+            raise HTTPException(status_code=401, detail="Invalid Firebase token")
+        except exceptions.ExpiredIdTokenError:
+            print("❌ [Backend] Expired Firebase token")
+            raise HTTPException(status_code=401, detail="Expired Firebase token")
+        except ValueError as e:
+            # Happens if the token arg is None/empty or badly formed
+            print("❌ [Backend] Malformed token:", str(e))
+            raise HTTPException(status_code=400, detail="Malformed Firebase token")
+        except Exception as e:
+            print("❌ [Backend] Firebase verification failed:", str(e))
+            raise HTTPException(status_code=401, detail="Firebase verification failed")
+
+        # ✅ If verification passes
         email = decoded_token["email"]
         name = decoded_token.get("name", "Anonymous")
         google_id = decoded_token.get("uid")
 
+        # Check if participant exists
         stmt = select(Participant).where(Participant.email == email)
         result = await db.execute(stmt)
         participant = result.scalars().first()
 
         if participant:
+            # Ensure user exists
             stmt = select(User).where(User.email == email)
             result = await db.execute(stmt)
             user = result.scalars().first()
@@ -126,29 +150,33 @@ async def firebase_login(request: Request, db: AsyncSession = Depends(get_db)):
                 await db.refresh(user)
 
             jwt_token = create_access_token({"sub": str(user.id)})
-            # identify_user(str(user.id), {"email": user.email, "name": user.name})
             track_event(str(user.id), "user_login", {"method": "firebase"})
+
             return {
                 "token": jwt_token,
-                "user": {"id": str(user.id), "name": user.name, "email": user.email}
+                "user": {"id": str(user.id), "name": user.name, "email": user.email},
             }
 
-        else:
-            stmt = select(Waitlist).where(Waitlist.email == email)
-            result = await db.execute(stmt)
-            existing = result.scalars().first()
+        # If no participant, add to waitlist
+        stmt = select(Waitlist).where(Waitlist.email == email)
+        result = await db.execute(stmt)
+        existing = result.scalars().first()
 
-            if not existing:
-                waitlist_entry = Waitlist(email=email, name=name)
-                db.add(waitlist_entry)
-                await db.commit()
+        if not existing:
+            waitlist_entry = Waitlist(email=email, name=name)
+            db.add(waitlist_entry)
+            await db.commit()
 
-            track_event(email, "firebase_preview")
-            return {
-                "token": None,
-                "user": {"name": name, "email": email},
-                "preview": True
-            }
+        track_event(email, "firebase_preview")
 
+        return {
+            "token": None,
+            "user": {"name": name, "email": email},
+            "preview": True,
+        }
+
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Invalid Firebase token")
+        print("🔥 [Backend] Unexpected error:", str(e))
+        raise HTTPException(status_code=500, detail="Server error during Firebase login")
