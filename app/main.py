@@ -30,10 +30,9 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://caveman.amitrverma.com",
-        "https://amitrverma.com",
+        "https://www.neurocientwa.com",
+        "https://neurocientwa.com",
         "http://localhost:3000", 
-        "https://neurocientwa-akaybxbygyc8bgeg.canadacentral-01.azurewebsites.net",
     ],
     allow_credentials=True,
     allow_methods=["*"],
