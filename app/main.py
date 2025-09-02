@@ -30,8 +30,8 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://www.neurocientwa.com",
-        "https://neurocientwa.com",
+        "https://www.neurocient.com",
+        "https://neurocient.com",
         "http://localhost:3000", 
     ],
     allow_credentials=True,
