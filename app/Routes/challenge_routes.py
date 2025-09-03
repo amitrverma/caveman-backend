@@ -29,7 +29,7 @@ async def list_challenges(db: AsyncSession = Depends(get_db)):
         {
             "id": str(c.id),
             "title": c.title,
-            "created_at": c.created_at.isoformat(),
+            "intro": c.intro,
         }
         for c in challenges
     ]
@@ -63,12 +63,24 @@ async def assign_microchallenge(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),  # ✅ User object
 ):
+    # Ensure challenge exists
     result = await db.execute(
         select(MicrochallengeDefinition).where(MicrochallengeDefinition.id == challenge_id)
     )
     challenge = result.scalar_one_or_none()
     if not challenge:
         raise HTTPException(status_code=404, detail="Challenge not found")
+
+    # Prevent assigning the same challenge twice
+    result = await db.execute(
+        select(UserMicrochallenge).where(
+            UserMicrochallenge.user_id == current_user.id,
+            UserMicrochallenge.challenge_id == challenge_id,
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail="Challenge already assigned")
 
     mapping = UserMicrochallenge(user_id=current_user.id, challenge_id=challenge_id)
     db.add(mapping)
@@ -82,6 +94,45 @@ async def assign_microchallenge(
         "status": mapping.status,
         "started_at": mapping.started_at,
     }
+
+
+class AssignMultipleRequest(BaseModel):
+    challenge_ids: list[UUID]
+
+
+@router.post("/assign/multiple")
+async def assign_multiple_challenges(
+    payload: AssignMultipleRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    assigned = []
+    for cid in payload.challenge_ids:
+        # Ensure challenge exists
+        result = await db.execute(
+            select(MicrochallengeDefinition).where(MicrochallengeDefinition.id == cid)
+        )
+        challenge = result.scalar_one_or_none()
+        if not challenge:
+            continue
+
+        # Skip if already assigned
+        result = await db.execute(
+            select(UserMicrochallenge).where(
+                UserMicrochallenge.user_id == current_user.id,
+                UserMicrochallenge.challenge_id == cid,
+            )
+        )
+        if result.scalar_one_or_none():
+            continue
+
+        mapping = UserMicrochallenge(user_id=current_user.id, challenge_id=cid)
+        db.add(mapping)
+        assigned.append(str(cid))
+        track_event(str(current_user.id), "challenge_assigned", {"challenge_id": str(cid)})
+
+    await db.commit()
+    return {"assigned_challenges": assigned}
 
 
 # 🔹 Get my assigned challenges
