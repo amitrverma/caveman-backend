@@ -242,7 +242,7 @@ async def log_today(
         )
     )
     if result.scalar_one_or_none():
-        return {"message": "Already logged today"}
+        return {"message": "Already logged today", "progress": assignment.progress}
 
     # insert new log
     new_log = MicrochallengeLog(
@@ -261,16 +261,22 @@ async def log_today(
     logs = logs_result.scalars().all()
     progress = round((len(logs) / 21) * 100, 1)
 
-    # ✅ check completion rule
-    if len(logs) >= 21 and progress >= 80:
-        assignment.status = "completed"
+    # ✅ mark as completed when progress ≥ 90%
+    if progress >= 90 and assignment.status != "success":
+        assignment.status = "success"
         assignment.completed_at = datetime.utcnow()
         db.add(assignment)
         await db.commit()
 
     track_event(str(current_user.id), "challenge_logged", {"assignment_id": str(payload.assignment_id)})
 
-    return {"message": "Log successful", "progress": progress}
+    return {
+        "message": "Log successful",
+        "progress": progress,
+        "status": assignment.status,
+        "completed_at": assignment.completed_at,
+    }
+
 
 
 
