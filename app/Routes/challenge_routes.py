@@ -19,8 +19,8 @@ from app.analytics.posthog_client import track_event
 router = APIRouter()
 
 
-@router.get("/")
-async def list_challenges(db: AsyncSession = Depends(get_db)):
+@router.get("/all")
+async def list_all_challenges(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(MicrochallengeDefinition).order_by(MicrochallengeDefinition.created_at)
     )
@@ -61,7 +61,7 @@ async def get_active_challenge(db: AsyncSession = Depends(get_db)):
 async def assign_microchallenge(
     challenge_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),  # ✅ User object
+    current_user: User = Depends(get_current_user),
 ):
     # Ensure challenge exists
     result = await db.execute(
@@ -71,7 +71,7 @@ async def assign_microchallenge(
     if not challenge:
         raise HTTPException(status_code=404, detail="Challenge not found")
 
-    # Prevent assigning the same challenge twice
+    # Check if already assigned
     result = await db.execute(
         select(UserMicrochallenge).where(
             UserMicrochallenge.user_id == current_user.id,
@@ -80,19 +80,33 @@ async def assign_microchallenge(
     )
     existing = result.scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=400, detail="Challenge already assigned")
+        # ✅ return existing mapping instead of error
+        return {
+            "id": str(existing.id),
+            "challenge_id": str(existing.challenge_id),
+            "status": existing.status,
+            "started_at": existing.started_at,
+            "already_assigned": True,
+        }
 
+    # Create new mapping
     mapping = UserMicrochallenge(user_id=current_user.id, challenge_id=challenge_id)
     db.add(mapping)
     await db.commit()
     await db.refresh(mapping)
-    track_event(str(current_user.id), "challenge_assigned", {"challenge_id": str(challenge_id)})
+
+    track_event(
+        str(current_user.id),
+        "challenge_assigned",
+        {"challenge_id": str(challenge_id)},
+    )
 
     return {
         "id": str(mapping.id),
         "challenge_id": str(mapping.challenge_id),
         "status": mapping.status,
         "started_at": mapping.started_at,
+        "already_assigned": False,
     }
 
 
