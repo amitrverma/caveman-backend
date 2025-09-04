@@ -54,7 +54,9 @@ class MicrochallengeDefinition(Base):
     tips = Column(JSON, nullable=False)            # Array of tips
     closing = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
     user_challenges = relationship("UserMicrochallenge", back_populates="challenge")
+
 
 class UserMicrochallenge(Base):
     __tablename__ = "user_microchallenges"
@@ -62,25 +64,32 @@ class UserMicrochallenge(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     challenge_id = Column(UUID(as_uuid=True), ForeignKey("microchallenge_definitions.id"), nullable=False)
-    status = Column(String, default="assigned")  # assigned / in_progress / completed
+    status = Column(
+        String,
+        default="active"
+    )  # active / success / failed / removed
     started_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
 
     challenge = relationship("MicrochallengeDefinition", back_populates="user_challenges")
+    logs = relationship("MicrochallengeLog", back_populates="assignment")
+
 
 class MicrochallengeLog(Base):
     __tablename__ = "microchallenge_logs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    challenge_id = Column(UUID(as_uuid=True), ForeignKey("microchallenge_definitions.id"), nullable=False)
+    assignment_id = Column(UUID(as_uuid=True), ForeignKey("user_microchallenges.id"), nullable=False)
     log_date = Column(Date, nullable=False)
     note = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    assignment = relationship("UserMicrochallenge", back_populates="logs")
+
     __table_args__ = (
-        UniqueConstraint("user_id", "challenge_id", "log_date", name="uq_user_challenge_date"),
-    )    
+        UniqueConstraint("assignment_id", "log_date", name="uq_assignment_log_date"),
+    )
+  
 
 class WebPushSubscription(Base):
     __tablename__ = "web_push_subscriptions"

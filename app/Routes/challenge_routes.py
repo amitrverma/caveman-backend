@@ -1,23 +1,36 @@
 # app/routers/microchallenges.py
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.database import get_db
 from app.models import (
     MicrochallengeDefinition,
     UserMicrochallenge,
-    User,
     MicrochallengeLog,
+    User,
 )
 from datetime import datetime, date
 from uuid import UUID
-from app.utils.auth import get_current_user  # ✅ returns a User object
+from app.utils.auth import get_current_user
 from pydantic import BaseModel
 from typing import Optional
 from app.analytics.posthog_client import track_event
 
 router = APIRouter()
 
+# ----------------------
+# Helpers
+# ----------------------
+
+def serialize_datetime(dt):
+    return dt.isoformat() if dt else None
+
+def serialize_date(d):
+    return d.isoformat() if d else None
+
+# ----------------------
+# Challenge Catalog
+# ----------------------
 
 @router.get("/all")
 async def list_all_challenges(db: AsyncSession = Depends(get_db)):
@@ -26,43 +39,32 @@ async def list_all_challenges(db: AsyncSession = Depends(get_db)):
     )
     challenges = result.scalars().all()
     return [
-        {
-            "id": str(c.id),
-            "title": c.title,
-            "intro": c.intro,
-        }
+        {"id": str(c.id), "title": c.title, "intro": c.intro}
         for c in challenges
     ]
 
 
+# ----------------------
+# Assignments
+# ----------------------
 
-@router.get("/active")
-async def get_active_challenge(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(MicrochallengeDefinition).order_by(MicrochallengeDefinition.created_at.desc()).limit(1)
-    )
-    challenge = result.scalar_one_or_none()
-    if not challenge:
-        raise HTTPException(status_code=404, detail="No active microchallenge found")
-    return {
-        "id": str(challenge.id),
-        "title": challenge.title,
-        "intro": challenge.intro,
-        "instructions": challenge.instructions,
-        "why": challenge.why,
-        "tips": challenge.tips,
-        "closing": challenge.closing,
-        "created_at": challenge.created_at.isoformat(),
-    }
-
-
-# 🔹 Assign challenge to user
 @router.post("/assign/{challenge_id}")
 async def assign_microchallenge(
     challenge_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Ensure no other active challenge
+    result = await db.execute(
+        select(UserMicrochallenge).where(
+            UserMicrochallenge.user_id == current_user.id,
+            UserMicrochallenge.status == "active",
+        )
+    )
+    active = result.scalar_one_or_none()
+    if active:
+        raise HTTPException(status_code=400, detail="You already have an active challenge")
+
     # Ensure challenge exists
     result = await db.execute(
         select(MicrochallengeDefinition).where(MicrochallengeDefinition.id == challenge_id)
@@ -71,82 +73,83 @@ async def assign_microchallenge(
     if not challenge:
         raise HTTPException(status_code=404, detail="Challenge not found")
 
-    # Check if already assigned
-    result = await db.execute(
-        select(UserMicrochallenge).where(
-            UserMicrochallenge.user_id == current_user.id,
-            UserMicrochallenge.challenge_id == challenge_id,
-        )
+    # Create assignment
+    mapping = UserMicrochallenge(
+        user_id=current_user.id,
+        challenge_id=challenge_id,
+        status="active",
+        started_at=datetime.utcnow(),
     )
-    existing = result.scalar_one_or_none()
-    if existing:
-        # ✅ return existing mapping instead of error
-        return {
-            "id": str(existing.id),
-            "challenge_id": str(existing.challenge_id),
-            "status": existing.status,
-            "started_at": existing.started_at,
-            "already_assigned": True,
-        }
-
-    # Create new mapping
-    mapping = UserMicrochallenge(user_id=current_user.id, challenge_id=challenge_id)
     db.add(mapping)
     await db.commit()
     await db.refresh(mapping)
 
-    track_event(
-        str(current_user.id),
-        "challenge_assigned",
-        {"challenge_id": str(challenge_id)},
-    )
+    track_event(str(current_user.id), "challenge_assigned", {"challenge_id": str(challenge_id)})
 
     return {
-        "id": str(mapping.id),
+        "assignment_id": str(mapping.id),
         "challenge_id": str(mapping.challenge_id),
         "status": mapping.status,
-        "started_at": mapping.started_at,
-        "already_assigned": False,
+        "started_at": serialize_datetime(mapping.started_at),
     }
 
 
-class AssignMultipleRequest(BaseModel):
-    challenge_ids: list[UUID]
-
-
-@router.post("/assign/multiple")
-async def assign_multiple_challenges(
-    payload: AssignMultipleRequest,
+@router.get("/active")
+async def get_active_assignment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    assigned = []
-    for cid in payload.challenge_ids:
-        # Ensure challenge exists
-        result = await db.execute(
-            select(MicrochallengeDefinition).where(MicrochallengeDefinition.id == cid)
+    result = await db.execute(
+        select(UserMicrochallenge, MicrochallengeDefinition)
+        .join(MicrochallengeDefinition, UserMicrochallenge.challenge_id == MicrochallengeDefinition.id)
+        .where(
+            UserMicrochallenge.user_id == current_user.id,
+            UserMicrochallenge.status == "active",
         )
-        challenge = result.scalar_one_or_none()
-        if not challenge:
-            continue
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="No active challenge")
+    um, mc = row
+    return {
+        "assignment_id": str(um.id),
+        "status": um.status,
+        "started_at": serialize_datetime(um.started_at),
+        "completed_at": serialize_datetime(um.completed_at),
+        "challenge": {
+            "id": str(mc.id),
+            "title": mc.title,
+            "intro": mc.intro,
+            "instructions": mc.instructions,
+            "why": mc.why,
+            "tips": mc.tips,
+            "closing": mc.closing,
+        },
+    }
 
-        # Skip if already assigned
-        result = await db.execute(
-            select(UserMicrochallenge).where(
-                UserMicrochallenge.user_id == current_user.id,
-                UserMicrochallenge.challenge_id == cid,
-            )
+
+@router.post("/remove/{assignment_id}")
+async def remove_assignment(
+    assignment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(UserMicrochallenge).where(
+            UserMicrochallenge.id == assignment_id,
+            UserMicrochallenge.user_id == current_user.id,
+            UserMicrochallenge.status == "active",
         )
-        if result.scalar_one_or_none():
-            continue
+    )
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Active challenge not found")
 
-        mapping = UserMicrochallenge(user_id=current_user.id, challenge_id=cid)
-        db.add(mapping)
-        assigned.append(str(cid))
-        track_event(str(current_user.id), "challenge_assigned", {"challenge_id": str(cid)})
-
+    assignment.status = "removed"
+    assignment.completed_at = datetime.utcnow()
+    db.add(assignment)
     await db.commit()
-    return {"assigned_challenges": assigned}
+    return {"message": "Challenge removed"}
 
 
 # 🔹 Get my assigned challenges
@@ -162,64 +165,52 @@ async def my_microchallenges(
     )
 
     rows = result.all()
+    response = []
 
-    return [
-        {
-            # mapping fields
-            "id": str(um.id),
+    for um, mc in rows:
+        # fetch logs for this assignment
+        logs_result = await db.execute(
+            select(MicrochallengeLog).where(MicrochallengeLog.assignment_id == um.id)
+        )
+        logs = logs_result.scalars().all()
+        progress = round((len(logs) / 21) * 100, 1)
+
+        # ✅ auto-mark completed if criteria met
+        if len(logs) >= 21 and progress >= 80 and um.status != "completed":
+            um.status = "completed"
+            um.completed_at = datetime.utcnow()
+            db.add(um)
+            await db.commit()
+
+        response.append({
+            # assignment fields
+            "assignment_id": str(um.id),
             "challenge_id": str(um.challenge_id),
             "status": um.status,
-            "started_at": um.started_at,
-            "completed_at": um.completed_at,
+            "started_at": um.started_at.isoformat() if um.started_at else None,
+            "completed_at": um.completed_at.isoformat() if um.completed_at else None,
 
             # definition fields
             "title": mc.title,
-            "intro": mc.intro,
-            "instructions": mc.instructions,
+            "intro": mc.intro or [],
+            "instructions": mc.instructions or [],
             "why": mc.why,
-            "tips": mc.tips,
+            "tips": mc.tips or [],
             "closing": mc.closing,
-            "created_at": mc.created_at,
-        }
-        for um, mc in rows
-    ]
+
+            # progress percentage only
+            "progress": progress,
+        })
+
+    return response
 
 
-# 🔹 Mark challenge as completed
-@router.post("/complete/{challenge_id}")
-async def complete_microchallenge(
-    challenge_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    result = await db.execute(
-        select(UserMicrochallenge).where(
-            UserMicrochallenge.user_id == current_user.id,
-            UserMicrochallenge.challenge_id == challenge_id,
-        )
-    )
-    mapping = result.scalar_one_or_none()
-    if not mapping:
-        raise HTTPException(status_code=404, detail="Challenge not assigned to user")
-
-    mapping.status = "completed"
-    mapping.completed_at = datetime.utcnow()
-
-    db.add(mapping)
-    await db.commit()
-    await db.refresh(mapping)
-    track_event(str(current_user.id), "challenge_completed", {"challenge_id": str(challenge_id)})
-
-    return {
-        "id": str(mapping.id),
-        "challenge_id": str(mapping.challenge_id),
-        "status": mapping.status,
-        "completed_at": mapping.completed_at,
-    }
-
+# ----------------------
+# Logging & Progress
+# ----------------------
 
 class LogTodayRequest(BaseModel):
-    challenge_id: UUID
+    assignment_id: UUID
     note: Optional[str] = ""
 
 
@@ -230,65 +221,115 @@ async def log_today(
     current_user: User = Depends(get_current_user),
 ):
     today = date.today()
+
+    # validate assignment
+    result = await db.execute(
+        select(UserMicrochallenge).where(
+            UserMicrochallenge.id == payload.assignment_id,
+            UserMicrochallenge.user_id == current_user.id,
+            UserMicrochallenge.status == "active",
+        )
+    )
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Active assignment not found")
+
+    # prevent duplicate log
     result = await db.execute(
         select(MicrochallengeLog).where(
-            MicrochallengeLog.user_id == current_user.id,
-            MicrochallengeLog.challenge_id == payload.challenge_id,
+            MicrochallengeLog.assignment_id == payload.assignment_id,
             MicrochallengeLog.log_date == today,
         )
     )
-    existing = result.scalar_one_or_none()
-    if existing:
-        return {"message": "Already logged for today"}
+    if result.scalar_one_or_none():
+        return {"message": "Already logged today"}
 
+    # insert new log
     new_log = MicrochallengeLog(
-        user_id=current_user.id,
-        challenge_id=payload.challenge_id,
+        assignment_id=payload.assignment_id,
         log_date=today,
         note=payload.note or "",
         created_at=datetime.utcnow(),
     )
-
     db.add(new_log)
     await db.commit()
-    track_event(str(current_user.id), "challenge_logged", {"challenge_id": str(payload.challenge_id)})
-    return {"message": "Log successful"}
+
+    # count logs for progress
+    logs_result = await db.execute(
+        select(MicrochallengeLog).where(MicrochallengeLog.assignment_id == payload.assignment_id)
+    )
+    logs = logs_result.scalars().all()
+    progress = round((len(logs) / 21) * 100, 1)
+
+    # ✅ check completion rule
+    if len(logs) >= 21 and progress >= 80:
+        assignment.status = "completed"
+        assignment.completed_at = datetime.utcnow()
+        db.add(assignment)
+        await db.commit()
+
+    track_event(str(current_user.id), "challenge_logged", {"assignment_id": str(payload.assignment_id)})
+
+    return {"message": "Log successful", "progress": progress}
 
 
-@router.get("/progress")
+
+@router.get("/progress/{assignment_id}")
 async def get_progress(
-    challenge_id: str = Query(...),
+    assignment_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    try:
-        challenge_uuid = UUID(challenge_id)
-    except ValueError:
-        raise HTTPException(status_code=422, detail="Invalid UUID")
-
+    # Verify assignment
     result = await db.execute(
-        select(MicrochallengeLog)
-        .where(
-            MicrochallengeLog.user_id == current_user.id,
-            MicrochallengeLog.challenge_id == challenge_uuid,
+        select(UserMicrochallenge).where(
+            UserMicrochallenge.id == assignment_id,
+            UserMicrochallenge.user_id == current_user.id,
         )
-        .order_by(MicrochallengeLog.log_date.desc())
+    )
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    # Fetch logs
+    result = await db.execute(
+        select(MicrochallengeLog).where(MicrochallengeLog.assignment_id == assignment_id)
     )
     logs = result.scalars().all()
+
+    completed_days = len(logs)
+    days_elapsed = (date.today() - assignment.started_at.date()).days + 1
+    ratio = completed_days / 21 if days_elapsed >= 21 else completed_days / days_elapsed
+
+    # Update status if challenge has ended
+    status = assignment.status
+    if status == "active" and days_elapsed >= 21:
+        if completed_days >= 17:
+            status = "success"
+        else:
+            status = "failed"
+        assignment.status = status
+        assignment.completed_at = datetime.utcnow()
+        db.add(assignment)
+        await db.commit()
+
     return {
-        "completed_days": len(logs),
-        "notes": [
-            {"date": log.log_date.isoformat(), "note": log.note or ""}
-            for log in logs
-        ],
+        "assignment_id": str(assignment.id),
+        "status": status,
+        "completed_days": completed_days,
+        "days_elapsed": days_elapsed,
+        "success_ratio": round(ratio * 100, 1),
+        "started_at": serialize_datetime(assignment.started_at),
+        "completed_at": serialize_datetime(assignment.completed_at),
+        "notes": [{"date": serialize_date(log.log_date), "note": log.note or ""} for log in logs],
     }
 
+# ----------------------
+# Get Challenge (catch-all, must be last!)
+# ----------------------
 
 @router.get("/{challenge_id}")
-async def get_challenge(
-    challenge_id: UUID,
-    db: AsyncSession = Depends(get_db),
-):
+async def get_challenge(challenge_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(MicrochallengeDefinition).where(MicrochallengeDefinition.id == challenge_id)
     )
@@ -304,6 +345,6 @@ async def get_challenge(
         "why": challenge.why,
         "tips": challenge.tips,
         "closing": challenge.closing,
-        "created_at": challenge.created_at.isoformat(),
+        "created_at": serialize_datetime(challenge.created_at),
     }
 
