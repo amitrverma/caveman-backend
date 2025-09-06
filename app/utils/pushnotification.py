@@ -1,10 +1,20 @@
 from pywebpush import webpush, WebPushException
 from app.config import settings
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete
+from app.models import WebPushSubscription
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
-def send_push(subscription: dict, payload: str):
+async def send_push(subscription: dict, payload: str, db: AsyncSession, sub_id=None):
+    """
+    subscription: dict with {endpoint, keys}
+    payload: str (JSON payload to send)
+    db: AsyncSession (so we can delete expired subs)
+    sub_id: optional UUID of the subscription row (to delete if expired)
+    """
     try:
         response = webpush(
             subscription_info=subscription,
@@ -18,17 +28,16 @@ def send_push(subscription: dict, payload: str):
         status_code = getattr(ex.response, "status_code", None)
         logger.error(f"WebPushException: {ex} (status {status_code})")
 
-        if status_code == 410:
-            # Subscription is gone (e.g. user unsubscribed) → delete from DB
-            logger.warning("Push subscription expired (410). Should delete from DB.")
-        elif status_code == 404:
-            # Subscription not found
-            logger.warning("Push subscription not found (404).")
+        # ❌ Remove expired/invalid subscriptions from DB
+        if status_code in (404, 410):  # not found / gone
+            if sub_id:
+                logger.warning(f"Deleting expired subscription {sub_id}")
+                await db.execute(delete(WebPushSubscription).where(WebPushSubscription.id == sub_id))
+                await db.commit()
+
         elif status_code == 400:
-            # Malformed request
             logger.warning("Push request malformed (400).")
         elif status_code == 401:
-            # Authentication issues (wrong keys, etc.)
             logger.error("Push authentication failed (401).")
         else:
             logger.error("Unhandled WebPush error.")

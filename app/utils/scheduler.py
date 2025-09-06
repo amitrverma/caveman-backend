@@ -9,6 +9,7 @@ from app.database import AsyncSessionLocal
 from app.utils.reminder_engine import (
     send_spot_pushes,
     send_microchallenge_pushes,
+    send_daily_nudge
 )
 from app.Routes.notifications_routes import send_daily_nudge
 
@@ -50,4 +51,4 @@ async def run_challenge_job():
     await run_safe(send_microchallenge_pushes, "microchallenge_push")
 
 async def run_behavioral_job():
-    await run_safe(send_daily_nudge, "daily_nudge")
+     await run_safe(send_daily_nudge, "daily_nudge")

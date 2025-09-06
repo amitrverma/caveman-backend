@@ -17,6 +17,22 @@ class User(Base):
     whatsapp_opt_in = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class UserPreferences(Base):
+    __tablename__ = "user_preferences"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+
+    nudge_enabled = Column(Boolean, default=True)
+    microchallenge_enabled = Column(Boolean, default=True)
+    notif_channel = Column(String, default="push")   # push | whatsapp | both
+    whatsapp_number = Column(String, nullable=True)
+    whatsapp_verified = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", backref="preferences")
 
 class CavemanSpot(Base):
     __tablename__ = "spots"

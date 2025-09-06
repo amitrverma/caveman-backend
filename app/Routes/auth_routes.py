@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from fastapi.responses import JSONResponse
 from app.database import get_db
-from app.models import User, Waitlist, Participant
+from app.models import User, Waitlist, Participant, UserPreferences
 from app.utils.auth import (
     hash_password,
     verify_password,
@@ -65,6 +65,11 @@ async def signup(req: AuthRequest, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    # ✅ Create default preferences row
+    prefs = UserPreferences(user_id=user.id)
+    db.add(prefs)
+    await db.commit()
 
     token = create_access_token({"sub": str(user.id)})
     response = JSONResponse(
@@ -191,6 +196,11 @@ async def firebase_login(request: Request, db: AsyncSession = Depends(get_db)):
                 await db.commit()
                 await db.refresh(user)
 
+                    # ✅ Create default preferences row
+                prefs = UserPreferences(user_id=user.id)
+                db.add(prefs)
+                await db.commit()
+                
             if user and not user.google_id:
                 user.google_id = google_id
                 await db.commit()
