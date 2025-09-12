@@ -112,6 +112,8 @@ async def get_me(current_user: User = Depends(get_current_user)):
     }
 
 # ---------------- Refresh ----------------
+from fastapi.responses import JSONResponse
+
 @router.post("/refresh")
 async def refresh(req: Request, db: AsyncSession = Depends(get_db)):
     rt = req.cookies.get("refresh_token")
@@ -133,12 +135,9 @@ async def refresh(req: Request, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
 
     # ✅ Issue new cookies
-    access, _ = set_auth_cookies(JSONResponse(content={}), user_id)
-
-    # ✅ Build consistent response
     response = JSONResponse(
         content={
-            "token": access,
+            "ok": True,
             "user": {
                 "id": str(user.id),
                 "name": user.name,
@@ -146,10 +145,9 @@ async def refresh(req: Request, db: AsyncSession = Depends(get_db)):
             },
         }
     )
-    set_auth_cookies(response, user_id)
+    set_auth_cookies(response, user_id)  # only set once
 
     return response
-
 
 # ---------------- Logout ----------------
 @router.post("/logout")

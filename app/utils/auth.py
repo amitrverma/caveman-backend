@@ -79,6 +79,7 @@ def set_auth_cookies(resp: Response, user_id: str):
         samesite=COOKIE_SAMESITE,
         domain=COOKIE_DOMAIN,
         path="/",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
     resp.set_cookie(
         key="refresh_token",
@@ -88,6 +89,7 @@ def set_auth_cookies(resp: Response, user_id: str):
         samesite=COOKIE_SAMESITE,
         domain=COOKIE_DOMAIN,
         path="/",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
     )
     resp.set_cookie(
         key="session_present",  # readable by frontend/middleware
